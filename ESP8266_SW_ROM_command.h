@@ -22,7 +22,7 @@ typedef struct
 	uint8_t direction;
 	uint8_t order;
 	uint8_t size[2];
-	int8_t checkSum[4];
+	uint8_t checkSum[4];
 	uint8_t dataBuffer[16];
 	uint8_t endSignal;
 }beginWriteCmdType;
@@ -35,15 +35,8 @@ typedef struct
 	int32_t Value;
 	uint8_t dataBuffer;
 }commandResponseType;
-
-typedef struct
-{
-	uint8_t error;
-	uint8_t status;
-}romLoaderError;
 #pragma pack(pop)
 
 void flashBegin(HANDLE handle, DWORD* dwWritten);
-void flashData(uint32_t dataSize, uint32_t sequenceNumber, uint32_t data, uint32_t checkSum);
-
 void flashBeginMsg(uint32_t* eraseSize, uint32_t* dataPacketCount, uint32_t* onePacketSize, uint32_t* flashOffset);
+void flashDataByFile(HANDLE handle, DWORD* dwWritten, FILE* fp, uint8_t* checkSum);

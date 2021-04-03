@@ -22,11 +22,11 @@ BYTE Sync[46] =
 	0xC0
 };
 
-BYTE readReg[14] =
+BYTE FLASH_END[14] =
 {
-	0xC0, 0x00, 0x0A, 0x04, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00,
-	0x10, 0x00, 0x40, 0xC0
+	0xC0, 0x00, 0x04, 0x00, 0x04,
+	0x00, 0x00, 0x00, 0x00, 0x01,
+	0x00, 0x00, 0x00, 0xC0
 };
 //
 
@@ -35,7 +35,6 @@ int main()
 	wchar_t COMPortNumber[10], COMPortMask[20] = L"\\\\.\\";
 	
 	printf("COM port name(ex: COM5): ");
-	
 	wscanf(L"%s", COMPortNumber);
 
 	if (COMPortNumber == NULL)
@@ -60,12 +59,56 @@ int main()
 	dcbMaster.StopBits = ONESTOPBIT;
 
 	SetCommState(hMasterCOM, &dcbMaster);
+	DWORD dwWritten[2048] = { 0 };
+	int8_t checkSum[200] = { 0 };
+
+	char fileName[100] = " ";
+
+	printf("file Name(ex: ksh.bin): ");
+	scanf("%s", fileName);
+	FILE* fp = fopen((const char*)fileName, "rb");
+
+	if (fp == NULL)
+	{
+		printf("can't open file\n");
+		exit(1);
+	}
+
+	checkSumCalculate(fp, checkSum);
+
+	fseek(fp, 0, SEEK_SET);
 	Sleep(60);
 
+	if(writeData(hMasterCOM, Sync, 46, dwWritten) == true)
+	{
+		Sleep(60);
+		if (writeData(hMasterCOM, Sync, 46, dwWritten) == true)
+		{
+			Sleep(60);
+			flashBegin(hMasterCOM, dwWritten);
+			Sleep(60);
+			flashDataByFile(hMasterCOM, dwWritten, fp, checkSum);
+		}
+	}
+
+	if(writeData(hMasterCOM, FLASH_END, 14, dwWritten) == false)
+	{
+		printf("flash_ene write error");
+		exit(1);
+	}
+
+	fclose(fp);
+	CloseHandle(hMasterCOM);
+	hMasterCOM = INVALID_HANDLE_VALUE;
+
+	return 0;
+}
+
+/*
 	//test code
 	BYTE testData[109];
-	DWORD dwWritten[120] = { 0 };
-		
+
+
 	if (writeData(hMasterCOM, Sync, 46, dwWritten) == true)
 	{
 		if (writeData(hMasterCOM, Sync, 46, dwWritten) == true)
@@ -83,9 +126,4 @@ int main()
 		}
 	}
 	//
-
-	CloseHandle(hMasterCOM);
-	hMasterCOM = INVALID_HANDLE_VALUE;
-
-	return 0;
-}
+	*/

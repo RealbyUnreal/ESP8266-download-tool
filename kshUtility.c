@@ -66,3 +66,26 @@ bool readData(HANDLE handle, BYTE* data, DWORD length, DWORD* dwRead, UINT timeo
 
 	return success;
 }
+
+int8_t checkSumCalculate(FILE* fp, int8_t* data)
+{
+	int8_t temp = 0, checkSum = 0xEF;
+
+	while (feof(fp) == 0)
+	{
+		int i = 0;
+		fread(&temp, sizeof(uint8_t), 1, fp);
+
+		checkSum ^= temp;
+
+		if ((i % 0x0FFF == 0) && (i != 0))
+		{
+			data[i] = checkSum;
+			checkSum = 0xEF;
+		}
+
+		i++;
+	}
+
+	return checkSum;
+}
