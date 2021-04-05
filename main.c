@@ -1,5 +1,7 @@
 #pragma warning(disable: 6054; disable: 6031)
 
+#define SYNC_SIZE 46
+
 #include <Windows.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -7,43 +9,11 @@
 #include <stdbool.h>
 #include "ESP8266_SW_ROM_command.h"
 
-//test variable
-BYTE Sync[46] = 
-{
-	0xC0, 0x00, 0x08, 0x24, 0x00,
-	0x78, 0x01, 0x3A, 0x00, 0x07,
-	0x07, 0x12, 0x20, 0x55, 0x55,
-	0x55, 0x55, 0x55, 0x55, 0x55,
-	0x55, 0x55, 0x55, 0x55, 0x55,
-	0x55, 0x55, 0x55, 0x55, 0x55,
-	0x55, 0x55, 0x55, 0x55, 0x55,
-	0x55, 0x55, 0x55, 0x55, 0x55,
-	0x55, 0x55, 0x55, 0x55, 0x55,
-	0xC0
-};
-
-BYTE FLASH_END[14] =
-{
-	0xC0, 0x00, 0x04, 0x00, 0x04,
-	0x00, 0x00, 0x00, 0x00, 0x01,
-	0x00, 0x00, 0x00, 0xC0
-};
-//
-
 int main()
 {
-	wchar_t COMPortNumber[10], COMPortMask[20] = L"\\\\.\\";
+	wchar_t COMPortMask[20] = L"\\\\.\\";
 	
-	printf("COM port name(ex: COM5): ");
-	wscanf(L"%s", COMPortNumber);
-
-	if (COMPortNumber == NULL)
-	{
-		printf("COM port number error");
-		exit(1);
-	}
-
-	wcscat(COMPortMask, COMPortNumber);
+	inputComPort(COMPortMask);
 
 	HANDLE hMasterCOM = CreateFile(COMPortMask, GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED, 0);
 	PurgeComm(hMasterCOM, PURGE_TXABORT | PURGE_RXABORT | PURGE_TXCLEAR | PURGE_RXCLEAR);
@@ -53,15 +23,31 @@ int main()
 
 	DCB dcbMaster = dcbMasterInitState;
 
-	dcbMaster.BaudRate = CBR_57600;
+	dcbMaster.BaudRate = CBR_115200;
 	dcbMaster.Parity = NOPARITY;
 	dcbMaster.ByteSize = 8;
 	dcbMaster.StopBits = ONESTOPBIT;
 
 	SetCommState(hMasterCOM, &dcbMaster);
-	DWORD dwWritten[2048] = { 0 };
+	DWORD dwWritten = 0;
+	DWORD dwRead = 0;
+	BYTE readCommand[0x1FFF] = { 0 };
 	int8_t checkSum[200] = { 0 };
+	
+	if (writeData(hMasterCOM, Sync, SYNC_SIZE, &dwWritten) == false)
+	{
+		printf("Sync command error");
+		exit(1);
+	}
+	Sleep(60);
 
+	if (writeData(hMasterCOM, Sync, SYNC_SIZE, &dwWritten) == false)
+	{
+		printf("Sync command error");
+		exit(1);
+	}
+	Sleep(60);
+	
 	char fileName[100] = " ";
 
 	printf("file Name(ex: ksh.bin): ");
@@ -79,21 +65,26 @@ int main()
 	fseek(fp, 0, SEEK_SET);
 	Sleep(60);
 
-	if(writeData(hMasterCOM, Sync, 46, dwWritten) == true)
-	{
-		Sleep(60);
-		if (writeData(hMasterCOM, Sync, 46, dwWritten) == true)
-		{
-			Sleep(60);
-			flashBegin(hMasterCOM, dwWritten);
-			Sleep(60);
-			flashDataByFile(hMasterCOM, dwWritten, fp, checkSum);
-		}
-	}
+	memBegin(hMasterCOM, &dwWritten);
+	Sleep(60);
+	memDataByFile(hMasterCOM, &dwWritten, fp, checkSum);
+	Sleep(60);
 
-	if(writeData(hMasterCOM, FLASH_END, 14, dwWritten) == false)
+	if (writeData(hMasterCOM, MEM_END, 18, &dwWritten) == false)
 	{
-		printf("flash_ene write error");
+		printf("mem_end write error");
+		exit(1);
+	}
+	
+	fseek(fp, 0, SEEK_SET);
+	Sleep(1000);
+	flashBegin(hMasterCOM, &dwWritten);
+	Sleep(60);
+	flashDataByFile(hMasterCOM, &dwWritten, fp, checkSum);
+
+	if(writeData(hMasterCOM, FLASH_END, 14, &dwWritten) == false)
+	{
+		printf("flash_end write error");
 		exit(1);
 	}
 
@@ -105,25 +96,12 @@ int main()
 }
 
 /*
-	//test code
-	BYTE testData[109];
-
-
-	if (writeData(hMasterCOM, Sync, 46, dwWritten) == true)
+	if (readData(hMasterCOM, readCommand, 100, &dwRead, 200) == true)
 	{
-		if (writeData(hMasterCOM, Sync, 46, dwWritten) == true)
+		for (int i = 0; i < 150; i++)
 		{
-			if (writeData(hMasterCOM, readReg, 14, dwWritten) == true)
-			{
-				if (readData(hMasterCOM, testData, 108, dwWritten, 10000) == true)
-				{
-					for (int i = 0; i < 108; i++)
-					{
-						printf("%2x\t", testData[i]);
-					}
-				}
-			}
+			printf("%02x\t", readCommand[i]);
 		}
+		printf("\n");
 	}
-	//
-	*/
+*/

@@ -89,3 +89,46 @@ int8_t checkSumCalculate(FILE* fp, int8_t* data)
 
 	return checkSum;
 }
+
+void inputComPort(wchar_t* COMPortMask)
+{
+	wchar_t COMPortNumber[10];
+	printf("COM port name(ex: COM5): ");
+	wscanf(L"%s", COMPortNumber);
+
+	if (COMPortNumber == NULL)
+	{
+		printf("COM port number error");
+		exit(1);
+	}
+
+	wcscat(COMPortMask, COMPortNumber);
+}
+
+void addNode(node* target, BYTE data)
+{
+	node* newNode = (node*)malloc(sizeof(node));
+
+	newNode->next = target->next;
+	newNode->data = data;
+
+	target->next = newNode;
+}
+
+void freeNodeAll(node* head)
+{
+	while (head != NULL)
+	{
+		struct NODE* next = head->next;
+		free(head);
+		head = next;
+	}
+}
+
+void removeNextNode(node* target)
+{
+	node* removeNode = target->next;
+	target->next = removeNode->next;
+
+	free(removeNode);
+}
