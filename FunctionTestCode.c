@@ -35,7 +35,7 @@ typedef struct NODE
 #pragma pack(pop)
 
 void dataBufWrite(BYTE* data, uint32_t bufSize, uint32_t* inputData);
-int8_t checkSumCalculate(FILE* fp);
+void checkSumCalculate(FILE* fp, int8_t* data);
 void flashDataByFile(FILE* fp, uint8_t checkSum);
 void addNode(node* target, BYTE data);
 void freeNodeAll(node* head);
@@ -46,21 +46,77 @@ void memFlashBeginMsg(uint32_t* eraseSize, uint32_t* dataPacketCount, uint32_t* 
 
 int main()
 {
-	int8_t x;
-	node* head = (node*)malloc(sizeof(node));
-	FILE* fp = fopen("factory_WROOM-02N_portChangedByJ.Min.bin", "rb");
+	int8_t* data = (int8_t*)calloc(0x208, 1), x = 0;
+	uint32_t fileSize, count = 0;
+	FILE* fp = fopen((const char*)"factory_WROOM-02N_portChangedByJ.Min.bin", "rb");
+	
 
 	if (fp == NULL)
 	{
 		printf("can't open file\n");
 		exit(1);
 	}
-	
-	x = checkSumCalculate(fp);
-	fseek(fp, 0, SEEK_SET);
-	memBegin();
 
-	fclose(fp);
+	fseek(fp, 0, SEEK_SET);
+
+	checkSumCalculate(fp, data);
+	
+	fseek(fp, 0, SEEK_SET);
+	FILE* fp3 = fopen((const char*)"test2.txt", "w");
+	beginWriteCmdType cmd;
+	BYTE* cp = &cmd;
+	BYTE startEndSignal = 0xC0;
+	BYTE temp[42], tempIndex = 1;
+	uint32_t inputData[4] = { 0x200000, 0x201, 0x1000, 0x40000000 };
+
+	//
+	cmd.startSignal = startEndSignal;
+	cmd.direction = 0x00;
+	cmd.order = ESP_FLASH_BEGIN;
+	cmd.size[0] = 0x10;
+	cmd.size[1] = 0x00;
+	for (int i = 0; i < 4; i++)
+	{
+		cmd.checkSum[i] = 0;
+	}
+	dataBufWrite(cmd.dataBuffer, 16, inputData);
+	cmd.endSignal = startEndSignal;
+	// 26bytes
+
+	temp[0] = startEndSignal;
+	for (int i = 1; i < 25; i++)
+	{
+		temp[tempIndex] = cp[i];
+
+		switch ((int)temp[tempIndex])
+		{
+		case 0xDB:
+			temp[tempIndex] = 0xDB;
+			tempIndex++;
+
+			temp[tempIndex] = 0xDD;
+			break;
+		case 0xC0:
+			temp[tempIndex] = 0xDB;
+			tempIndex++;
+
+			temp[tempIndex] = 0xDC;
+			break;
+		}
+
+		tempIndex++;
+	}
+	temp[tempIndex] = startEndSignal;
+	tempIndex++;
+
+	for (uint32_t i = 0; i < tempIndex; i++)
+	{
+		fprintf(fp3, "%02X ", temp[i]);
+	}
+
+	fprintf(fp3, "\n%02X", tempIndex);
+
+	free(data);
 	return 0;
 }
 
@@ -77,18 +133,39 @@ void dataBufWrite(BYTE* data, uint32_t bufSize, uint32_t* inputData)
 	}
 }
 
-int8_t checkSumCalculate(FILE* fp)
+void checkSumCalculate(FILE* fp, int8_t* data)
 {
+	/*
 	int8_t temp = 0, checkSum = 0xEF;
-	
-	for (int i = 0; i < 0x1000; i++)
+
+	for (int j = 0; feof(fp) == 0; j++)
 	{
-		fread(&temp, sizeof(uint8_t), 1, fp);
+		for (int i = 0; i < 0x1000; i++)
+		{
+			fread(&temp, sizeof(uint8_t), 1, fp);
 
-		checkSum ^= temp;
+			checkSum ^= (temp & 0xFF);
+		}
+
+		data[j] = checkSum;
+		checkSum = 0xEF;
 	}
+	*/
+	
+	int8_t temp[0x1000] = { 0 }, checkSum = 0xEF;
+	
+	for (int j = 0; feof(fp) == 0; j++)
+	{	
+		fread(temp, 1, 0x1000, fp);
 
-	return checkSum;
+		for (int i = 0; i < 0x1000; i++)
+		{
+			checkSum ^= temp[i];
+		}
+
+		data[j] = checkSum;
+		checkSum = 0xEF;
+	}
 }
 
 void flashDataByFile(FILE* fp, uint8_t checkSum)
@@ -101,20 +178,21 @@ void flashDataByFile(FILE* fp, uint8_t checkSum)
 	//{
 	//	addNode(head, 0);
 	//}
+	FILE* fp2 = fopen((const char*)"test.txt", "w");
 
 	uint32_t count = 0x1000 + 26;
-	uint8_t temp[0x1FFF] = { 0 };
+	uint8_t temp[0x2000] = { 0 };
 	beginWriteCmdType cmd;
 	uint8_t startEndSignal = 0xC0;
 	uint8_t* cp = &cmd;
 	uint32_t tempIndex, countGap = 0;
-	uint32_t inputData[4] = { 0x1000, 0x00, 0x00,0x00 }; //"Data to write", length,Sequence number, 0, 0
+	uint32_t inputData[4] = { 0x1049, 0x00, 0x00,0x00 }; //"Data to write", length,Sequence number, 0, 0
 
 	//
 	cmd.startSignal = startEndSignal;
 	cmd.direction = 0x00;
 	cmd.order = ESP_FLASH_DATA;
-	cmd.size[0] = 0x00;
+	cmd.size[0] = 0x1A;
 	cmd.size[1] = 0x10;
 	cmd.checkSum[1] = 0x00;
 	cmd.checkSum[2] = 0x00;
@@ -123,14 +201,14 @@ void flashDataByFile(FILE* fp, uint8_t checkSum)
 	for (int j = 0; j < 1; j++)
 	{
 		tempIndex = 1;
-		cmd.checkSum[0] = checkSum;
-		inputData[1] += (0x1000 + countGap);
+		cmd.checkSum[0] = (checkSum & 0xFF);
+		inputData[1] = 0x00;
 		dataBufWrite(cmd.dataBuffer, 16, inputData);
 		temp[0] = startEndSignal;
 
 		for (uint32_t i = 1; i < 0x1000 + 25; i++)
 		{
-			if (i < 25)
+			if (i <= 25)
 			{
 				temp[tempIndex] = cp[i];
 			}
@@ -139,7 +217,7 @@ void flashDataByFile(FILE* fp, uint8_t checkSum)
 			{
 				fread(&temp[tempIndex], sizeof(uint8_t), 1, fp);
 			}
-
+			
 			switch ((int)temp[tempIndex])
 			{
 			case 0xDB:
@@ -155,7 +233,9 @@ void flashDataByFile(FILE* fp, uint8_t checkSum)
 				temp[tempIndex] = 0xDC;
 				break;
 			}
+			
 			tempIndex++;
+
 		}
 
 		temp[tempIndex] = startEndSignal;
@@ -163,11 +243,15 @@ void flashDataByFile(FILE* fp, uint8_t checkSum)
 
 		countGap = tempIndex - count;
 
-		for (int i = 0; i < tempIndex; i++)
+		for (uint32_t i = 0; i < tempIndex; i++)
 		{
-			printf("%02X\t", temp[i]);
+			fprintf(fp2, "%02X ", temp[i]);
 		}
+
+		fprintf(fp2, "\n%02X", tempIndex);
 	}
+
+	fclose(fp2);
 	//
 }
 

@@ -67,29 +67,26 @@ bool readData(HANDLE handle, BYTE* data, DWORD length, DWORD* dwRead, UINT timeo
 	return success;
 }
 
-int8_t checkSumCalculate(FILE* fp, int8_t* data)
+void checkSumCalculate(FILE* fp, int8_t* data)
 {
-	int8_t temp = 0, checkSum = 0xEF;
+	int8_t temp[0x1000] = { 0 }, checkSum = 0xEF;
 
-	while (feof(fp) == 0)
+	for (uint32_t j = 0; feof(fp) == 0; j++)
 	{
-		int i = 0;
-		fread(&temp, sizeof(uint8_t), 1, fp);
+		fread(temp, 1, 0x1000, fp);
 
-		checkSum ^= temp;
-
-		if ((i % 0x0FFF == 0) && (i != 0))
+		for (uint32_t i = 0; i < 0x1000; i++)
 		{
-			data[i] = checkSum;
-			checkSum = 0xEF;
+			checkSum ^= temp[i];
 		}
 
-		i++;
+		data[j] = checkSum;
+		checkSum = 0xEF;
 	}
-
-	return checkSum;
 }
 
+#pragma warning(push)
+#pragma warning(disable: 6031; disable: 6011)
 void inputComPort(wchar_t* COMPortMask)
 {
 	wchar_t COMPortNumber[10];
@@ -105,6 +102,13 @@ void inputComPort(wchar_t* COMPortMask)
 	wcscat(COMPortMask, COMPortNumber);
 }
 
+void inputFileName(char* fileName)
+{
+	printf("file Name(ex: ksh.bin): ");
+	scanf("%s", fileName);
+}
+
+
 void addNode(node* target, BYTE data)
 {
 	node* newNode = (node*)malloc(sizeof(node));
@@ -114,6 +118,8 @@ void addNode(node* target, BYTE data)
 
 	target->next = newNode;
 }
+
+#pragma warning(pop)
 
 void freeNodeAll(node* head)
 {
@@ -131,4 +137,31 @@ void removeNextNode(node* target)
 	target->next = removeNode->next;
 
 	free(removeNode);
+}
+
+void ReadPacket(HANDLE hRead)
+{
+	DWORD dwRead = 0;
+	BYTE* readCommand = (BYTE*)calloc(0x2000,1);
+
+	if (readCommand == NULL)
+	{
+		printf("memory allocate error");
+		exit(1);
+	}
+
+	if (readData(hRead, readCommand, 0x2000, &dwRead, 100) == true)
+	{
+		for (DWORD i = 0; i < dwRead; i++)
+		{
+			printf("%02x ", readCommand[i]);
+
+			if (i % 8 == 7)
+				printf("\n");
+		}
+
+		printf("\n");
+	}
+
+	free(readCommand);
 }
