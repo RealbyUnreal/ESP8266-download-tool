@@ -23,4 +23,4 @@ void inputFileName(char* fileName);
 void addNode(node* target, BYTE data);
 void freeNodeAll(node* head);
 void removeNextNode(node* target);
-void ReadPacket(hMasterCOM);
+int readPacket(HANDLE hRead);

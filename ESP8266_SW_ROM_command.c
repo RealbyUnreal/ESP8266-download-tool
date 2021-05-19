@@ -2,18 +2,18 @@
 
 #pragma warning(push)
 #pragma warning(disable: 4133)
-void flashBegin(HANDLE handle, DWORD* dwWritten)
+void flashBegin(HANDLE handle, DWORD* dwWritten, int j)
 {
 	beginWriteCmdType cmd;
 	BYTE* cp = &cmd;
 	BYTE startEndSignal = 0xC0;
 	BYTE temp[42], tempIndex = 1;
 
-	uint32_t eraseSize, dataPacketCount, onePacketSize, flashOffset;
-	memFlashBeginMsg(&eraseSize, &dataPacketCount, &onePacketSize, &flashOffset, ESP_FLASH_BEGIN);
+	//uint32_t eraseSize, dataPacketCount, onePacketSize, flashOffset;
+	//memFlashBeginMsg(&eraseSize, &dataPacketCount, &onePacketSize, &flashOffset, ESP_FLASH_BEGIN);
 
-	uint32_t inputData[4] = { eraseSize, dataPacketCount, onePacketSize, flashOffset };
-
+	uint32_t inputData[4] = { 0x1000 , 0x0001, 0x1000, 0x00 };
+	inputData[3] = 0 + (j * 0x1000);
 	//
 	cmd.startSignal = startEndSignal;
 	cmd.direction = 0x00;
@@ -35,18 +35,18 @@ void flashBegin(HANDLE handle, DWORD* dwWritten)
 
 		switch ((int)temp[tempIndex])
 		{
-		case 0xDB:
-			temp[tempIndex] = 0xDB;
-			tempIndex++;
+			case 0xDB:
+				temp[tempIndex] = 0xDB;
+				tempIndex++;
 
-			temp[tempIndex] = 0xDD;
-			break;
-		case 0xC0:
-			temp[tempIndex] = 0xDB;
-			tempIndex++;
-
-			temp[tempIndex] = 0xDC;
-			break;
+				temp[tempIndex] = 0xDD;
+				break;
+			case 0xC0:
+				temp[tempIndex] = 0xDB;
+				tempIndex++;
+	
+				temp[tempIndex] = 0xDC;
+				break;
 		}
 
 		tempIndex++;
@@ -54,25 +54,25 @@ void flashBegin(HANDLE handle, DWORD* dwWritten)
 
 	temp[tempIndex] = startEndSignal;
 	tempIndex++;
-
+	
 	if (writeData(handle, temp, tempIndex, dwWritten) == false)
 	{
-		printf("mem_begin write error");
+		printf("flash_begin write error");
 		exit(1);
 	}
 }
 
-void memBegin(HANDLE handle, DWORD* dwWritten)
+void memBegin(HANDLE handle, DWORD* dwWritten, int j)
 {
 	beginWriteCmdType cmd;
 	BYTE* cp = &cmd;
-	BYTE startEndSignal = 0xC0;
+	BYTE startEndSignal = 0xC0, IsTrue = 2;
 	BYTE temp[42], tempIndex = 1;
 
-	uint32_t totalSize, dataPacketCount, onePacketSize, memoryOffset;
-	memFlashBeginMsg(&totalSize, &dataPacketCount, &onePacketSize, &memoryOffset, ESP_MEM_BEGIN);
+	//uint32_t eraseSize, dataPacketCount, onePacketSize, flashOffset;
+	//memFlashBeginMsg(&eraseSize, &dataPacketCount, &onePacketSize, &flashOffset, ESP_FLASH_BEGIN);
 
-	uint32_t inputData[4] = { totalSize, dataPacketCount, onePacketSize, memoryOffset };
+	uint32_t inputData[4] = { 0x1000 , 0x0001, 0x1000, (j * 0x1000) };
 
 	//
 	cmd.startSignal = startEndSignal;
@@ -80,6 +80,7 @@ void memBegin(HANDLE handle, DWORD* dwWritten)
 	cmd.order = ESP_MEM_BEGIN;
 	cmd.size[0] = 0x10;
 	cmd.size[1] = 0x00;
+
 	for (int i = 0; i < 4; i++)
 	{
 		cmd.checkSum[i] = 0;
@@ -114,11 +115,15 @@ void memBegin(HANDLE handle, DWORD* dwWritten)
 
 	temp[tempIndex] = startEndSignal;
 	tempIndex++;
-
-	if (writeData(handle, temp, tempIndex, dwWritten) == false)
+	while (IsTrue == 1)
 	{
-		printf("mem_begin write error");
-		exit(1);
+		if (writeData(handle, temp, tempIndex, dwWritten) == false)
+		{
+			printf("flash_begin write error");
+			exit(1);
+		}
+
+		IsTrue = readPacket(handle);
 	}
 }
 #pragma warning(pop)
@@ -154,18 +159,15 @@ void memFlashBeginMsg(uint32_t* eraseSize, uint32_t* dataPacketCount, uint32_t* 
 }
 #pragma warning(pop)
 
-void flashDataByFile(HANDLE handle, DWORD* dwWritten, FILE* fp, uint8_t* checkSum)
+void flashDataByFile(HANDLE handle, DWORD* dwWritten, FILE* fp, uint8_t CheckSum)
 {
-	uint32_t count = 0x1000 + 26;
-	uint8_t temp[0x2000];
+	uint8_t temp[0x2000] = { 0 };
 	beginWriteCmdType cmd;
 	uint8_t startEndSignal = 0xC0;
 	uint8_t* cp = &cmd;
-	uint32_t tempIndex, countGap = 0;
-	uint32_t inputData[4] = { 0x1000, 0x00, 0x00,0x00 }; //"Data to write", length,Sequence number, 0, 0
-
-	memset(temp, 0xFF, sizeof(temp));
-
+	uint32_t tempIndex = 0;
+	uint32_t inputData[4] = { 0x1000, 0x00, 0x00,0x00 }; //"Data to write" length,Sequence number, 0, 0
+	
 	cmd.startSignal = startEndSignal;
 	cmd.direction = 0x00;
 	cmd.order = ESP_FLASH_DATA;
@@ -175,67 +177,57 @@ void flashDataByFile(HANDLE handle, DWORD* dwWritten, FILE* fp, uint8_t* checkSu
 	cmd.checkSum[2] = 0x00;
 	cmd.checkSum[3] = 0x00;
 
-	for (int j = 0; feof(fp) == 0; j++)
+	tempIndex = 1;
+	cmd.checkSum[0] = (CheckSum & 0xFF);
+	inputData[1] = 0x00;
+	dataBufWrite(cmd.dataBuffer, 16, inputData);
+	temp[0] = startEndSignal;
+
+	for (uint32_t i = 1; i < 0x1000 + 25; i++)
 	{
-		tempIndex = 1;
-		cmd.checkSum[0] = (checkSum[j] & 0xFF);
-		inputData[1] += (0x1000 + countGap);
-		dataBufWrite(cmd.dataBuffer, 16, inputData);
-		temp[0] = startEndSignal;	
-
-		for (uint32_t i = 1; i < 0x1000 + 25; i++)
+		if (i < 25)
 		{
-			if (i <= 25)
-			{
-				temp[tempIndex] = cp[i];
-			}
-
-			else if (i > 25 && i < 0x1000 + 25)
-			{
-				fread(&temp[tempIndex], sizeof(uint8_t), 1, fp);
-			}
-
-			switch ((int)temp[tempIndex])
-			{
-				case 0xDB:
-					temp[tempIndex] = 0xDB;
-					tempIndex++;
-
-					temp[tempIndex] = 0xDD;
-					break;
-				case 0xC0:
-					temp[tempIndex] = 0xDB;
-					tempIndex++;
-
-					temp[tempIndex] = 0xDC;
-					break;
-			}
+			temp[tempIndex] = cp[i];
 			tempIndex++;
 		}
-
-		temp[tempIndex] = startEndSignal;
-		tempIndex++;
-
-		countGap = tempIndex - count;
-		if (writeData(handle, temp, tempIndex, dwWritten) == false)
+		else if (i >= 25 && i < 0x1000 + 25)
 		{
-			printf("file data write error");
-			exit(1);
+			fread(&temp[tempIndex], sizeof(uint8_t), 1, fp);
 		}
+		switch ((int)temp[tempIndex])
+		{
+			case 0xDB:
+				temp[tempIndex] = 0xDB;
+				tempIndex++;
+
+				temp[tempIndex] = 0xDD;
+				break;
+			case 0xC0:
+				temp[tempIndex] = 0xDB;
+				tempIndex++;
+
+				temp[tempIndex] = 0xDC;
+				break;
+		}
+		tempIndex++;
 	}
+
+	temp[tempIndex] = startEndSignal;
+	tempIndex++;
+
+	while (writeData(handle, temp, tempIndex, dwWritten) == false);
 }
 
-void memDataByFile(HANDLE handle, DWORD* dwWritten, FILE* fp, uint8_t* checkSum)
+void memDataByFile(HANDLE handle, DWORD* dwWritten, FILE* fp, uint8_t* CheckSum)
 {
 	uint32_t count = 0x1000 + 26;
-	uint8_t temp[0x2000] = { 0 };
+	uint8_t temp[0x2000];
 	beginWriteCmdType cmd;
 	uint8_t startEndSignal = 0xC0;
 	uint8_t* cp = &cmd;
 	uint32_t tempIndex, countGap = 0;
 	uint32_t inputData[4] = { 0x1000, 0x00, 0x00,0x00 }; //"Data to write", length,Sequence number, 0, 0
 
-	cmd.startSignal = startEndSignal;
 	cmd.direction = 0x00;
 	cmd.order = ESP_MEM_DATA;
 	cmd.size[0] = 0x00;
@@ -246,20 +238,21 @@ void memDataByFile(HANDLE handle, DWORD* dwWritten, FILE* fp, uint8_t* checkSum)
 
 	for (int j = 0; feof(fp) == 0; j++)
 	{
-		tempIndex = 1;
-		cmd.checkSum[0] = (checkSum[j] & 0xFF);
-		inputData[1] += (0x1000 + countGap);
+		cmd.checkSum[0] = (CheckSum[j] & 0xFF);
+		inputData[1] = true;
 		dataBufWrite(cmd.dataBuffer, 16, inputData);
+
 		temp[0] = startEndSignal;
+		tempIndex = 1;
 
 		for (uint32_t i = 1; i < 0x1000 + 25; i++)
 		{
-			if (i <= 25)
+			if (i < 25)
 			{
 				temp[tempIndex] = cp[i];
 			}
 
-			else if (i > 25 && i < 0x1000 + 25)
+			else if (i >= 25 && i < 0x1000 + 25)
 			{
 				fread(&temp[tempIndex], sizeof(uint8_t), 1, fp);
 			}
@@ -281,16 +274,17 @@ void memDataByFile(HANDLE handle, DWORD* dwWritten, FILE* fp, uint8_t* checkSum)
 			}
 			tempIndex++;
 		}
-
 		temp[tempIndex] = startEndSignal;
 		tempIndex++;
 
-		countGap = tempIndex - count;
+		flashBegin(handle, dwWritten, j);
 		if (writeData(handle, temp, tempIndex, dwWritten) == false)
 		{
 			printf("file data write error");
 			exit(1);
 		}
+
+		//readPacket(handle);
 	}
 }
 

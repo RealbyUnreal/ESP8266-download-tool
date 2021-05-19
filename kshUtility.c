@@ -51,19 +51,29 @@ bool readData(HANDLE handle, BYTE* data, DWORD length, DWORD* dwRead, UINT timeo
 
 	if (!ReadFile(handle, data, length, dwRead, &o))
 	{
-		if (GetLastError() == ERROR_IO_PENDING)
+		DWORD result = GetLastError();
+		if (result == ERROR_IO_PENDING)
 		{
 			if (WaitForSingleObject(o.hEvent, timeout) == WAIT_OBJECT_0)
+			{
 				success = true;
+			}
 		}
 
+		else
+			printf("Last Error: %d", result);
+
 		GetOverlappedResult(handle, &o, dwRead, FALSE);
+		printf("dwRead: %#02x\n", *dwRead);
 	}
+
 	else
+	{
+		printf("dwRead: %#x\n", dwRead[0]);
 		success = true;
+	}
 
 	CloseHandle(o.hEvent);
-
 	return success;
 }
 
@@ -73,7 +83,7 @@ void checkSumCalculate(FILE* fp, int8_t* data)
 
 	for (uint32_t j = 0; feof(fp) == 0; j++)
 	{
-		fread(temp, 1, 0x1000, fp);
+		fread(temp, 0x1000, 1, fp);
 
 		for (uint32_t i = 0; i < 0x1000; i++)
 		{
@@ -139,10 +149,10 @@ void removeNextNode(node* target)
 	free(removeNode);
 }
 
-void ReadPacket(HANDLE hRead)
+int readPacket(HANDLE hRead)
 {
 	DWORD dwRead = 0;
-	BYTE* readCommand = (BYTE*)calloc(0x2000,1);
+	BYTE readCommand[0x100] = { 0 };
 
 	if (readCommand == NULL)
 	{
@@ -150,18 +160,21 @@ void ReadPacket(HANDLE hRead)
 		exit(1);
 	}
 
-	if (readData(hRead, readCommand, 0x2000, &dwRead, 100) == true)
+	while(readData(hRead, readCommand, 12, &dwRead, 100) != true);
+
+	for (DWORD i = 0; i < dwRead; i++)
 	{
-		for (DWORD i = 0; i < dwRead; i++)
-		{
-			printf("%02x ", readCommand[i]);
-
-			if (i % 8 == 7)
-				printf("\n");
-		}
-
-		printf("\n");
+		printf("%02x ", readCommand[i]);
 	}
 
-	free(readCommand);
+	printf("\n");
+
+	if (readCommand[9] == 0)
+		return 1;
+
+	else if (readCommand[2] == 0x02 && readCommand[9] == 0x01)
+		return 2;
+
+	else
+		return 0;
 }
