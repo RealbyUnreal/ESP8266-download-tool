@@ -77,13 +77,14 @@ bool readData(HANDLE handle, BYTE* data, DWORD length, DWORD* dwRead, UINT timeo
 	return success;
 }
 
-void checkSumCalculate(FILE* fp, int8_t* data)
+void checkSumCalculate(FILE* fp, int8_t* data, uint32_t onePacketSize)
 {
-	int8_t temp[0x1000] = { 0 }, checkSum = 0xEF;
+	BYTE* temp = (BYTE*)calloc(onePacketSize, 1);
+	int8_t checkSum = 0xEF;
 
 	for (uint32_t j = 0; feof(fp) == 0; j++)
 	{
-		fread(temp, 0x1000, 1, fp);
+		fread(temp, onePacketSize, 1, fp);
 
 		for (uint32_t i = 0; i < 0x1000; i++)
 		{
@@ -118,7 +119,34 @@ void inputFileName(char* fileName)
 	scanf("%s", fileName);
 }
 
+int readPacket(HANDLE hRead)
+{
+	DWORD dwRead = 0;
+	BYTE readCommand[0x100] = { 0 };
 
+	if (readCommand == NULL)
+	{
+		printf("memory allocate error");
+		exit(1);
+	}
+
+	while (readData(hRead, readCommand, 12, &dwRead, 200) != true);
+
+	for (DWORD i = 0; i < dwRead; i++)
+	{
+		printf("%02x ", readCommand[i]);
+	}
+
+	printf("\n");
+
+	if (readCommand[9] == 0)
+		return 1;
+
+	else
+		return 0;
+}
+
+/*
 void addNode(node* target, BYTE data)
 {
 	node* newNode = (node*)malloc(sizeof(node));
@@ -148,33 +176,4 @@ void removeNextNode(node* target)
 
 	free(removeNode);
 }
-
-int readPacket(HANDLE hRead)
-{
-	DWORD dwRead = 0;
-	BYTE readCommand[0x100] = { 0 };
-
-	if (readCommand == NULL)
-	{
-		printf("memory allocate error");
-		exit(1);
-	}
-
-	while(readData(hRead, readCommand, 12, &dwRead, 100) != true);
-
-	for (DWORD i = 0; i < dwRead; i++)
-	{
-		printf("%02x ", readCommand[i]);
-	}
-
-	printf("\n");
-
-	if (readCommand[9] == 0)
-		return 1;
-
-	else if (readCommand[2] == 0x02 && readCommand[9] == 0x01)
-		return 2;
-
-	else
-		return 0;
-}
+*/

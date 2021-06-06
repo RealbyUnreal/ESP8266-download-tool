@@ -23,19 +23,19 @@ BYTE Sync[46] =
 	0xC0
 };
 
-BYTE FLASH_END[14] =
-{
-	0xC0, 0x00, 0x04, 0x04, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x01,
-	0x00, 0x00, 0x00, 0xC0
-};
-
 BYTE MEM_END[18] =
 {
 	0xC0, 0x00, 0x06, 0x08, 0x00,
 	0x00, 0x00, 0x00, 0x00, 0x01,
 	0x00, 0x00, 0x00, 0x00, 0x00,
 	0x00, 0x00, 0xC0
+};
+
+BYTE FLASH_END[14] =
+{
+	0xC0, 0x00, 0x04, 0x04, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x01,
+	0x00, 0x00, 0x00, 0xC0
 };
 
 int main()
@@ -65,7 +65,7 @@ int main()
 	BYTE* checkSum = (BYTE*)calloc(0x208, 1);
 	bool qq = false;
 	int repeat = 0;
-	
+
 	if (writeData(hMasterCOM, Sync, SYNC_SIZE, &dwWritten) == false)
 	{
 		printf("Sync command error");
@@ -104,42 +104,32 @@ int main()
 		exit(1);
 	}
 
-	checkSumCalculate(fp, checkSum);
+	uint32_t eraseSize, dataPacketCount, onePacketSize, flashOffset;
+	memFlashBeginMsg(&eraseSize, &dataPacketCount, &onePacketSize, &flashOffset, ESP_FLASH_BEGIN);
+
+	checkSumCalculate(fp, checkSum, onePacketSize);
 
 	fseek(fp, 0, SEEK_SET);
 
-	for (int j = 0; feof(fp) == 0; j++)
-	{
-		while (repeat == 0)
-		{
-			flashBegin(hMasterCOM, &dwWritten, j);
-			repeat = readPacket(hMasterCOM);
+	flashDataByFile(hMasterCOM, &dwWritten, fp, checkSum, eraseSize, dataPacketCount, onePacketSize, flashOffset);
 
-			flashDataByFile(hMasterCOM, &dwWritten, fp, checkSum[j]);
-			printf("\ncheckSum = %#02X\n", checkSum[j]);
-			while (readPacket(hMasterCOM) != 1);
-		}
+	if (writeData(hMasterCOM, FLASH_END, 14, &dwWritten) == false)
+	{
+		printf("flash_end write error\n");
+		exit(1);
 	}
 
-	while (qq != true)
-	{
-		if(writeData(hMasterCOM, FLASH_END, 14, &dwWritten) == false)
-		{
-			printf("flash_end write error");
-			exit(1);
-		}
-
-		qq = readData(hMasterCOM, readCommand, 2, &dwRead, 100);
-	}
+	qq = readData(hMasterCOM, readCommand, 2, &dwRead, 200);
 
 	fclose(fp);
+	printf("Download completed\n");
 
 	SetCommState(hMasterCOM, &dcbMasterInitState);
 	Sleep(60);
 
 	CloseHandle(hMasterCOM);
 	hMasterCOM = INVALID_HANDLE_VALUE;
-	
+
 	free(checkSum);
 
 	return 0;

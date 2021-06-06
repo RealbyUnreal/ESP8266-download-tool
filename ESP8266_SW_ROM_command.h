@@ -37,8 +37,8 @@ typedef struct
 }commandResponseType;
 #pragma pack(pop)
 
-void flashBegin(HANDLE handle, DWORD* dwWritten, int j);
-void memBegin(HANDLE handle, DWORD* dwWritten, int j);
-void memFlashBeginMsg(uint32_t* eraseSize, uint32_t* dataPacketCount, uint32_t* onePacketSize, uint32_t* flashOffset, int type); 
-void flashDataByFile(HANDLE handle, DWORD* dwWritten, FILE* fp, uint8_t CheckSum);
-void memDataByFile(HANDLE handle, DWORD* dwWritten, FILE* fp, uint8_t* CheckSum);
+void flashBegin(HANDLE handle, DWORD* dwWritten, int j, uint32_t eraseSize, uint32_t dataPacketCount, uint32_t onePacketSize, uint32_t flashOffset);
+//void memBegin(HANDLE handle, DWORD* dwWritten, int j);
+void memFlashBeginMsg(uint32_t* eraseSize, uint32_t* dataPacketCount, uint32_t* onePacketSize, uint32_t* flashOffset, int type);
+void flashDataByFile(HANDLE handle, DWORD* dwWritten, FILE* fp, uint8_t* CheckSum, uint32_t eraseSize, uint32_t dataPacketCount, uint32_t onePacketSize, uint32_t flashOffset);
+//void memDataByFile(HANDLE handle, DWORD* dwWritten, FILE* fp, uint8_t* CheckSum);

@@ -13,14 +13,14 @@ typedef struct NODE
 #pragma pack(pop)
 
 void dataBufWrite(uint8_t* dataBuf, uint32_t bufSize, uint32_t* inputData);
-void checkSumCalculate(FILE* fp, int8_t* data);
+void checkSumCalculate(FILE* fp, int8_t* data, uint32_t onePacketSize);
 
 bool writeData(HANDLE handle, BYTE* data, DWORD length, DWORD* dwWritten);
 bool readData(HANDLE handle, BYTE* data, DWORD length, DWORD* dwRead, UINT timeout);
 void inputComPort(wchar_t* comPortMask);
 void inputFileName(char* fileName);
-
-void addNode(node* target, BYTE data);
-void freeNodeAll(node* head);
-void removeNextNode(node* target);
 int readPacket(HANDLE hRead);
+
+//void addNode(node* target, BYTE data);
+//void freeNodeAll(node* head);
+//void removeNextNode(node* target);
